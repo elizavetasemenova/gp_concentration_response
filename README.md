@@ -1,1 +1,1 @@
-# gp_concentration_response
+ GPs for concentration-response curves: code and data
