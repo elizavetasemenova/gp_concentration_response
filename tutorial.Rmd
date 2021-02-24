@@ -1,0 +1,304 @@
+---
+title: "Changepoint Gaussian Process for concerntration-response curve fitting."
+output: html_document
+---
+
+This tutorial provides commentary to the code supplied with the manuscript "Flexible fitting of PROTAC concentration-response curves with Gaussian Processes".
+
+## Include libraries
+
+As the first step, we need to install three libraries - *tidyverse*, *utils* and *rstan*. The two first libraries of the list are standard libraries for performing data analysis in R and we anticipate no issues; to be able to use *rstan* locally, one needs to follow the instructions on [this webpage](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started). Any further issues related to the installation or usage of *rstan* can be raised at the [Forum](https://discourse.mc-stan.org/). Please do not proceed further until the command *library(rstan)* runs sucessfully.
+```{r}
+  library(utils)
+  library(tidyverse)
+  library(ggplot2)
+  library(rstan)
+  options(mc.cores = parallel::detectCores())
+  rstan_options(auto_write = TRUE)
+```
+
+We will need a few functions for post-processing of posterior samples, which are located in the file *functions.R*. Make sure to set working directory to the directory of the current file. Then execute the following line:
+```{r}
+  source("functions.R")
+```
+
+
+## Read and plot raw data
+We read in raw data files and take a look a look at their content:
+```{r}
+  controls <- read.csv(file = 'controls.csv')
+  controls <- controls %>% select('Normalized')
+  
+  compound <- read.csv(file = 'compound.csv')
+```
+
+
+```{r}
+ head(controls)
+```
+
+```{r}
+ head(compound)
+```
+
+Pre-process raw data for further analysis: transform concentration to the log10 scale and scale controls in the same way as the treatment measurements will be scaled for the Stan model.
+```{r}
+  compound <- compound %>%
+    select(concentration, activity) %>%
+    mutate(log_concentration = log10(concentration * 10^(-6))) %>% 
+    arrange(log_concentration)
+  
+  # scaling controls
+  sd_global <- sd(compound $activity)
+  controls_sc <- controls / sd_global
+```
+
+Before conducting the analysis, it is useful to plot the raw data: both cases and controls. To visualize the controls, we chose the minimal available treatmnent concentration as their x-value and add noise to this coordinate:
+```{r}
+# create an artificial dataset to plot controls, and add jitter to their x-coordinate
+controls_to_plot <- controls
+controls_to_plot['x'] = rep(min(compound$log_concentration) , nrow(controls_to_plot)) + rnorm(nrow(controls_to_plot), 0,0.08)
+names(controls_to_plot) <- c("activity", "log_concentration")
+ 
+p <-  ggplot(compound, aes(x=log_concentration, y=activity)) +
+    geom_point(colour="tomato") + labs(x ="log concentration (x)", y = "Degradation (y)") +
+    geom_point(data=controls_to_plot, color="grey40")
+
+p
+```
+
+## Prepare data for Stan
+
+To fit the Stan model, we will use the file *"model_invlogit.stan"*. Its *data* section contains description of 7 data entries. To be able to run the model successfully, we need to provide these quantities in the list format:
+```{r}
+  # add replicate number and unique concentration index
+  compound <- compound %>%
+    mutate(rep_ind = rep(c(1,2), nrow(compound)/2),
+           coord_ind = rep(1: (nrow(compound)/2), each=2),
+           activity_sc = activity/ sd_global)
+  
+  # prepare data for Stan
+  x_long <- compound$log_concentration
+  x <- unique(x_long)
+  N <- length(x)
+  coord_ind <- compound$coord_ind
+  y_sc <- compound$activity_sc
+  N_y <- length(y_sc)
+  controls_sc <- controls_sc$Normalized
+
+  stan_dat <- list(N_conc = N, 
+                   N_treatment = N_y, 
+                   x = x, 
+                   y_treatment = y_sc, 
+                   x_index = coord_ind,
+                   N_control = length(controls_sc),
+                   y_control = controls_sc)
+```
+
+
+## Compile Stan model
+Make sure that the Stan file is located in the same directory as the current R file. Then compile the Stan model:
+```{r}
+mod <- stan_model(file="model_invlogit.stan")
+```
+
+Please note that the compilation of the model might take some time. After this has been done once, there is no need to recompile to run the model again (given that there has been no changes in the Stan file). After the initial compilation, this line can be commented out.
+
+## Fit Stan model
+To fit the Stan model, we need to provide the prepared data *stan_dat* and the compiled model *mod*. We specify the number of chains and iterations for each chain:
+
+```{r}
+ # number of iterations for each chain 
+ niter = 2000
+  
+  # fit the model
+  m <- sampling(mod, 
+                data = stan_dat, 
+                iter = niter, 
+                chains = 4, 
+                cores=4)
+  
+  # how long did it take for the model to run?
+  times <- print(get_elapsed_time(m))
+  print(paste0("Stan mean computation time : ", round(mean(apply(times, 1, sum)),2), " sec"))
+  print(paste0("Stan sd computation time : ", round(sd(apply(times, 1, sum)),2), " sec"))
+```
+
+On average, it took each chain about 6 seconds to run.
+
+## Evaluate convergence
+
+Results of Bayesian inference should only be used if the chains have achieved convergence. It can be assessed both using numerical measures. Among numerical measures is the R-hat statistics, which should be close to 1.
+
+```{r}
+  pars = c("sigma_rep",  "sigma", "mu", "rho", "eta")
+
+  # evaluate convergence by Rhat and n_eff
+  print(m, 
+        pars = pars,
+        probs = c(0.10, 0.5, 0.75, 0.90),
+        digits_summary = 2, include = TRUE)
+```
+
+Visually convergence can be estimated using traceplots and posterior density plots. Traceplots characterize stationarity: if a chain has converge, we will see its walks around the same value, i.e. it would have, globally, a horizontal trend.
+
+```{r}
+# traceplots
+traceplot(m, pars = pars, inc_warmup=FALSE)
+```
+We observe that traceplots for all parameters and all chains are of stationary character.
+
+
+```{r}
+  # posterior density plots
+  stan_dens(m, pars = pars, separate_chains = TRUE)
+```
+We observe that posterior density plots of different chains have very high overlap for all parameters. This means that all chians agree on the estimates.
+
+## Kriging
+After the posterior samples have been obtained, we can use them to perform kriging, i.e. prediction of the activity values at unobserved concentrations. We begin by extracting posterior samples of each parameter from the *stanfit* object *m*:
+```{r}
+ # extract samples
+  mu <- rstan::extract(m, pars="mu")[[1]]
+  rho <- rstan::extract(m, pars="rho")[[1]]
+  theta <- rstan::extract(m, pars="theta")[[1]]
+  sigma <- rstan::extract(m, pars="sigma")[[1]]
+  sigma_rep <- rstan::extract(m, pars="sigma_rep")[[1]]
+  eta <- rstan::extract(m, pars="eta")[[1]]
+  y <- t(rstan::extract(m, pars="y")[[1]])
+  N_samp <- length(mu)
+```
+
+
+To perform kriging, we need to define prediction points $x_\text{pred},$ i.e. the concentration at which we would like to obtain the estimates of the activity. We chose a uniform grid between the minimal and the maximal measured conccentrations:
+```{r}  
+  N_pred <- 200
+  x_pred <- seq(min(x), max(x), length.out=N_pred)
+```
+
+Given the concentrations $x$ at which the measurements have been performed, the predictive grid $x_\text{pred}$ and posterior samples of parameters, we can perform kriging and convert predictions to the original scale:
+```{r}  
+  SigmaMM <- CalcSigma(x, x, N_samp, eta, rho, sigma, theta)
+  SigmaNM <- CalcSigma(x_pred, x, N_samp, eta, rho, sigma, theta)
+  
+  SigmaMM_inv <- array(data = NA, dim = c(N_samp, N, N))
+  for (k in 1:N_samp){
+    SigmaMM_inv[k, , ] = solve(SigmaMM[k, , ])
+  }
+  
+  mean_response <- array(data=NA, dim = c(N_samp, N_pred))
+  
+  for (k in 1:N_samp){
+    mean_response[k,] = mu[k] + ((SigmaNM[k,,] %*% SigmaMM_inv[k,,])  %*% (y[, k] - mu[k]))
+  }
+  
+  theta_mean <- mean(theta)
+  
+  # convert back to original scale
+  gp <- mean_response * sd_global
+  gp_mean <- apply(gp, 2, mean)
+  gp_95 <- apply(gp, 2, function(x) quantile(x, probs = c(0.025, 0.975)))
+  gp.df = data.frame(x = c(x_pred), gp = gp_mean, gp_025 = gp_95[1,], gp_975 = gp_95[2,])
+  gp.df = gp.df[order(gp.df$x),]
+```
+
+## Biologically meaningful parameters
+Now we have obtained estimaes of the GP at a finer scale than the initial measurements were observed and can use them to calculate biologically relevant parameters of interest:
+```{r}
+  DC50_samps <- rep(NA, dim(gp)[1])
+  Dmax_samps <- rep(NA, dim(gp)[1])
+  
+  for (i in 1: dim(gp)[1]){
+    DC50_samps[i] <- DC50_func(mu[i], gp[i,], gp.df$x, eps=0.15)[[1]]
+    Dmax_samps[i] <- min(gp[i,])
+  }
+  
+  DC50 <- quantile(DC50_samps, probs= c(0.025, 0.25, 0.5, 0.75, 0.975))
+  Dmax <- quantile(Dmax_samps, probs= c(0.025, 0.25, 0.5, 0.75, 0.975))
+  
+  h <- hist(DC50_samps, breaks = 500, plot = FALSE)
+  px <- h$density
+  DC50_draws <- sample(h$mids, size = niter * 1.5, replace = TRUE, prob = px)
+```
+
+
+## Plot results
+The estimated curve and biologically relevant parameters can be displayed visually together with their uncertainties:
+```{r, fig.width=9, fig.height=6}
+  
+  col3 <- "#00998a" 
+  plot(0, 
+        ylab = 'Target protein degradation (%)', 
+        xlab = expression('log'[10]*'-concentration [M]'), 
+        pch='',
+        ylim= c(min(gp, y), max(gp, y)), 
+        xlim= c(min(x, x_pred), max(x, x_pred)),
+        cex.lab = 1.0)
+   
+  lims <- par("usr")
+  
+   # controls 
+  points(rep(min(x_long), length(controls_sc)) + rnorm(length(controls_sc), 0, 0.1), controls$Normalized, pch=19, col='grey40')
+  
+  
+  # observations
+  points(x_long, y_sc * sd_global, pch=15, col="tomato", cex=1.5)
+  
+  # theta
+  abline(v=theta_mean, col="coral3", lty = 2, lwd=2) 
+  theta_95 <- quantile(theta, probs = c(0.025, 0.25, 0.75, 0.975))
+  rect(theta_95[1], lims[3], theta_95[4], lims[4],  col=alpha("coral3", 0.3), border=FALSE)
+  text(theta_mean+0.5, lims[3]+5, expression('log'[10]*'(PoD)'), cex=1.0)
+  
+   # Dmax
+  rect(lims[1], Dmax[1], lims[2], Dmax[5],  col=alpha("goldenrod1", 0.4), border=FALSE)
+  abline(h=Dmax[3], col="goldenrod4", lty = 2, lwd=2)
+  text(lims[1]+0.3, Dmax[3]+5,  expression('D'["max"]), cex=1.0)
+  
+  # DC50
+  rect(DC50[1], lims[3], DC50[5], lims[4],  col=alpha("steelblue", 0.3), border=FALSE)
+  abline(v=DC50[3], col="steelblue", lty= 2, lwd=2)
+  text(DC50[3]+0.5, lims[3]+5, expression('log'[10]*'(DC'[50]*')'), cex=1.0)
+  
+  polygon(c(gp.df$x,rev(gp.df$x)),c(gp.df$gp_975,rev(gp.df$gp_025)),
+          col=alpha(col3,0.3), border=NA)
+
+  lines(gp.df$x, gp.df$gp, pch=19, col="darkslategray", lwd=2)
+
+  legend("topright", 
+          legend = c("observations", 
+                     "controls",
+                     "GP mean",
+                     "GP 95% BCI", 
+                     expression('log'[10]*'(PoD)'), 
+                     expression('log'[10]*'(PoD) 95% BCI'),
+                     expression('D'["max"]),
+                     expression('D'["max"]*' 95% BCI'),
+                     expression('log'[10]*'(DC'[50]*')'),
+                     expression('log'[10]*'(DC'[50]*')'*' 95% BCI')),
+          col = c("tomato",
+                  "grey40",
+                  "darkslategray", 
+                  alpha(col3,0.8), 
+                  "coral3", 
+                  "coral3", 
+                  "goldenrod1",
+                  "goldenrod1",
+                  "steelblue",
+                  alpha("steelblue", 0.6)),
+         pch = c(15,19, NA, 15, NA, 15, NA, 15, NA, 15), 
+         lty=c(NA,NA, 1,NA,2,NA, 2, NA, 2, NA),
+         lwd=c(NA,NA,3,NA,3,3,3, NA, 3, NA),
+         bty = "n", 
+         pt.cex = 1, 
+         cex = 1.0, 
+         text.col = "black",
+         inset = c(0.05, 0.01))
+```
+
+
+##  Computational environment
+```{r}
+sessionInfo()
+```
+
