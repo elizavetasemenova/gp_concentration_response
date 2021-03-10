@@ -2,4 +2,4 @@ Example data and code for the manuscript "Flexible fitting of PROTAC concentrati
 
 The kernel implemented in the Stan file, is a changepoint kernel with a steep transition function (see Supplement).
 
-To avoid installing rstan, one can run the model in the cloud using Kaggle R kernel: https://www.kaggle.com/lizasemenova/gp-concentration-response
+To avoid installing rstan, one can run the model in the cloud using Kaggle R kernel: https://www.kaggle.com/lizasemenova/gp-concentration-response. One needs to create a Kaggle account in order to be able to use Kaggle's R kernel.
