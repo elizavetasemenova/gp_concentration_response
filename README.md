@@ -5,7 +5,13 @@ The kernel implemented in the Stan file, is a changepoint kernel with a steep tr
 
 ## Using Kaggle R kernel
 
-To avoid installing the "rstan" library, one can run the model in the cloud using Kaggle R kernel, following this notebook: https://www.kaggle.com/lizasemenova/gp-concentration-response. One needs to create a Kaggle account in order to be able to use Kaggle's R kernel.
+To avoid installing the "rstan" library, one can run the model in the cloud using Kaggle R kernel, following the pre-made notebook: https://www.kaggle.com/lizasemenova/gp-concentration-response. 
+
+Here are the steps to follow:
+
+- One needs to create a Kaggle account in order to be able to use Kaggle's R kernel.
+- follow the link to open notebook https://www.kaggle.com/lizasemenova/gp-concentration-response
+- press 'copy and edit' (top right corner)
 
 Data, the Stan model and a file with helper functions need to be added manually as explained below:
 
