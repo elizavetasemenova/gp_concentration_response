@@ -1,6 +1,6 @@
   rm(list=ls())
   
-  # set working directory to 'Sourse File Location'
+  # set working directory 
   #setwd(path_to_directory)
   
   #-------------------------------------
@@ -14,19 +14,20 @@
   rstan_options(auto_write = TRUE)
   
   
-  source("../model/functions.R")
+  source("modelgp/functions.R")
   
   #-------------------------------------
   # Read and plot data
   #-------------------------------------
-  controls <- read.csv(file = '../data/controls.csv')
+  controls <- read.csv(file = 'datagp/controls.csv')
   controls <- controls %>% select('Normalized')
   
-  compound <- read.csv(file = '../data/compound.csv')
+  compound <- read.csv(file = 'datagp/compound.csv')
   
   head(controls)
   
   head(compound)
+  
 
   compound <- compound %>%
     select(concentration, activity) %>%
@@ -81,7 +82,7 @@
   # Compile Stan model
   #-------------------------------------
   
-  mod <- stan_model(file="../model/model_invlogit.stan")
+  mod <- stan_model(file="modelgp/model_invlogit.stan")
   
   #-------------------------------------
   # Fit Stan model
@@ -263,3 +264,5 @@
   # Computational environment
   #-------------------------------------
   sessionInfo()
+  
+  
