@@ -43,3 +43,6 @@ Data, the Stan model and a file with helper functions need to be added to Kaggle
 - make sure that 'modelgp' folder has appeared in the 'Data' tab (at the top right corner) within the folder 'input'
 
 
+
+- Check that both folders have been added to the right place by running `list.files(path = "../input")`. The output should be `'datagp''modelgp'`
+
