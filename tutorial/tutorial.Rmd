@@ -1,9 +1,9 @@
 ---
-title: "Changepoint Gaussian Process for concerntration-response curve fitting."
+title: "Flexible fitting of PROTAC concentration-response curves with changepoint Gaussian Processes"
 output: html_document
 ---
 
-This tutorial provides commentary to the code supplied with the manuscript "Flexible fitting of PROTAC concentration-response curves with Gaussian Processes".
+This tutorial provides commentary to the code supplied with the manuscript "Flexible fitting of PROTAC concentration-response curves with changepoint Gaussian Processes".
 
 ## Include libraries
 
@@ -19,17 +19,17 @@ As the first step, we need to install three libraries - *tidyverse*, *utils* and
 
 We will need a few functions for post-processing of posterior samples, which are located in the file *functions.R*. Make sure to set working directory to the directory of the current file. Then execute the following line:
 ```{r}
-  source("../model/functions.R")
+  source("../modelgp/functions.R")
 ```
 
 
 ## Read and plot raw data
 We read in raw data files and take a look at their content:
 ```{r}
-  controls <- read.csv(file = '../data/controls.csv')
+  controls <- read.csv(file = '../datagp/controls.csv')
   controls <- controls %>% select('Normalized')
   
-  compound <- read.csv(file = '../data/compound.csv')
+  compound <- read.csv(file = '../datagp/compound.csv')
 ```
 
 
@@ -99,7 +99,7 @@ To fit the Stan model, we will use the file *"model_invlogit.stan"*. Its *data* 
 ## Compile Stan model
 Make sure that the Stan file is located in the same directory as the current R file. Then compile the Stan model:
 ```{r}
-mod <- stan_model(file="../model/model_invlogit.stan")
+mod <- stan_model(file="../modelgp/model_invlogit.stan")
 ```
 
 Please note that the compilation of the model might take some time. After this has been done once, there is no need to recompile to run the model again (given that there has been no changes in the Stan file). After the initial compilation, this line can be commented out.
@@ -146,6 +146,7 @@ Visually convergence can be estimated using traceplots and posterior density plo
 # traceplots
 traceplot(m, pars = pars, inc_warmup=FALSE)
 ```
+
 We observe that traceplots for all parameters and all chains are of stationary character.
 
 
@@ -153,6 +154,7 @@ We observe that traceplots for all parameters and all chains are of stationary c
   # posterior density plots
   stan_dens(m, pars = pars, separate_chains = TRUE)
 ```
+
 We observe that posterior density plots of different chains have very high overlap for all parameters. This means that all chians agree on the estimates.
 
 ## Kriging
