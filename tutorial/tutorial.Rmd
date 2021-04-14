@@ -298,6 +298,17 @@ The estimated curve and biologically relevant parameters can be displayed visual
          inset = c(0.05, 0.01))
 ```
 
+##   Print parameter estimates
+```{r}
+
+out.df <- data.frame(Dmax = c(Dmax[1], Dmax[3], Dmax[5]),
+                       DC50 = c(DC50[1], DC50[3], DC50[5]),
+                       theta = c(theta_95[1], theta_mean, theta_95[4]))
+  
+cat('Parameter estimates :\n')
+round(t(out.df),2)
+```
+
 
 ##  Computational environment
 ```{r}
