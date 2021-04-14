@@ -20,7 +20,7 @@ Data, the Stan model and a file with helper functions need to be added to Kaggle
 
 - make sure that the 'datagp' folder, containing 'compound.csv' and 'controls.scv', has been downloaded from GitHub
 
-- click 'File' (top left corner) -> 'Add or upload data' -> 'Ulpoad dataset' -> enter dataset title 'datagp' -> browse your files and upload 'compound.csv' and 'controls.scv' -> click 'Create'
+- on Kaggle, click 'File' (top left corner) -> 'Add or upload data' -> 'Ulpoad dataset' -> enter dataset title 'datagp' -> browse your files and upload 'compound.csv' and 'controls.scv' -> click 'Create'
 
 - it might take some time for Kaggle to upload the files
 
@@ -34,7 +34,7 @@ Data, the Stan model and a file with helper functions need to be added to Kaggle
 
 - make sure that the 'modelgp' folder, containing 'functions.R' and 'model_invlogit.stan', has been downloaded from GitHub
 
-- click 'File' (top left corner) -> 'Add or upload data' -> 'Upload dataset' -> enter dataset title 'modelgp' -> browse your files and upload 'functions.R' and 'model_invlogit.stan' -> click 'Create'
+- on Kaggle, click 'File' (top left corner) -> 'Add or upload data' -> 'Upload dataset' -> enter dataset title 'modelgp' -> browse your files and upload 'functions.R' and 'model_invlogit.stan' -> click 'Create'
 
 - it might take some time for Kaggle to upload the files
 
