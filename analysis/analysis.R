@@ -185,7 +185,9 @@
   # Plot results
   #-------------------------------------
   
-  pdf("figure_one_compound.pdf", height=10, width=18)
+  # Uncomment this line to print the final plot into an external pdf.
+  #pdf("figure_one_compound.pdf", height=10, width=18)
+  
   
   par(mai=c(1,1,1,1))
   
@@ -258,7 +260,8 @@
          text.col = "black",
          inset = c(0.05, 0.01))
   
-  dev.off()
+  # Uncomment this line to print the final plot into an external pdf.
+  #dev.off()
 
   #-------------------------------------
   # Computational environment
