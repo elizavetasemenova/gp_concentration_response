@@ -22,6 +22,11 @@ We will need a few functions for post-processing of posterior samples, which are
   source("../modelgp/functions.R")
 ```
 
+Set up the number of iterations of an MCMC (niter) and the number of prediction points (N_pred). They have high impact on the computation time.
+```{r}
+  niter <- 5000
+  N_pred <- 200
+```  
 
 ## Read and plot raw data
 We read in raw data files and take a look at their content:
@@ -69,7 +74,7 @@ p
 
 ## Prepare data for Stan
 
-To fit the Stan model, we will use the file *"model_invlogit.stan"*. Its *data* section contains description of 7 data entries. To be able to run the model successfully, we need to provide these quantities in the list format:
+To fit the Stan model, we will use the file *"model_invlogit_nu_g.stan"*. Its *data* section contains description of 7 data entries. To be able to run the model successfully, we need to provide these quantities in the list format:
 ```{r}
   # add replicate number and unique concentration index
   compound <- compound %>%
@@ -99,7 +104,7 @@ To fit the Stan model, we will use the file *"model_invlogit.stan"*. Its *data* 
 ## Compile Stan model
 Make sure that the Stan file is located in the same directory as the current R file. Then compile the Stan model:
 ```{r}
-mod <- stan_model(file="../modelgp/model_invlogit.stan")
+mod <- stan_model(file="../modelgp/model_invlogit_nu_g.stan")
 ```
 
 Please note that the compilation of the model might take some time. After this has been done once, there is no need to recompile to run the model again (given that there has been no changes in the Stan file). After the initial compilation, this line can be commented out.
@@ -108,9 +113,6 @@ Please note that the compilation of the model might take some time. After this h
 To fit the Stan model, we need to provide the prepared data *stan_dat* and the compiled model *mod*. We specify the number of chains and iterations for each chain:
 
 ```{r}
- # number of iterations for each chain 
- niter = 2000
-  
   # fit the model
   m <- sampling(mod, 
                 data = stan_dat, 
@@ -131,7 +133,7 @@ On average, it took each chain about 6 seconds to run.
 Results of Bayesian inference should only be used if the chains have achieved convergence. It can be assessed both using numerical measures. Among numerical measures is the R-hat statistics, which should be close to 1.
 
 ```{r}
-  pars = c("sigma_rep",  "sigma", "mu", "rho", "eta")
+  pars = c("sigma_rep",  "sigma", "mu", "rho", "eta", "nu", "g")
 
   # evaluate convergence by Rhat and n_eff
   print(m, 
@@ -167,6 +169,7 @@ After the posterior samples have been obtained, we can use them to perform krigi
   sigma <- rstan::extract(m, pars="sigma")[[1]]
   sigma_rep <- rstan::extract(m, pars="sigma_rep")[[1]]
   eta <- rstan::extract(m, pars="eta")[[1]]
+  g_par <- rstan::extract(m, pars="g")[[1]]
   y <- t(rstan::extract(m, pars="y")[[1]])
   N_samp <- length(mu)
 ```
@@ -174,14 +177,13 @@ After the posterior samples have been obtained, we can use them to perform krigi
 
 To perform kriging, we need to define prediction points $x_\text{pred},$ i.e. the concentration at which we would like to obtain the estimates of the activity. We chose a uniform grid between the minimal and the maximal measured concentrations:
 ```{r}  
-  N_pred <- 200
   x_pred <- seq(min(x), max(x), length.out=N_pred)
 ```
 
 Given the concentrations $x$ at which the measurements have been performed, the predictive grid $x_\text{pred}$ and posterior samples of parameters, we can perform kriging and convert predictions to the original scale:
 ```{r}  
-  SigmaMM <- CalcSigma(x, x, N_samp, eta, rho, sigma, theta)
-  SigmaNM <- CalcSigma(x_pred, x, N_samp, eta, rho, sigma, theta)
+  SigmaMM <- CalcSigma_g(x, x, N_samp, eta, rho, sigma, theta, g_par)
+  SigmaNM <- CalcSigma_g(x_pred, x, N_samp, eta, rho, sigma, theta, g_par)
   
   SigmaMM_inv <- array(data = NA, dim = c(N_samp, N, N))
   for (k in 1:N_samp){
@@ -228,69 +230,82 @@ Now we have obtained estimaes of the GP at a finer scale than the initial measur
 The estimated curve and biologically relevant parameters can be displayed visually together with their uncertainties:
 ```{r, fig.width=9, fig.height=6}
   
+  par(mai=c(1,1,1,1))
+  ptscex <-  1.0
+  title <- ""
+  
   col3 <- "#00998a" 
+  point_cols <- c("tomato", "dodgerblue4", "darkolivegreen3", "goldenrod3")
+  
   plot(0, 
-        ylab = 'Target protein degradation (%)', 
-        xlab = expression('log'[10]*'-concentration [M]'), 
-        pch='',
-        ylim= c(min(gp, y), max(gp, y)), 
-        xlim= c(min(x, x_pred), max(x, x_pred)),
-        cex.lab = 1.0)
-   
+       ylab = 'Target protein degradation (%)', 
+       xlab = expression('log'[10]*'-concentration [M]'), 
+       pch='',
+       #ylim= c(min(gp, y), max(gp, y)), 
+       ylim=c(-110, 10),
+       xlim= c(min(x, x_pred), max(x, x_pred)),
+       cex.lab =  1.0,
+       main=title,
+       cex.main= 1.0)
+  
   lims <- par("usr")
   
-   # controls 
-  points(rep(min(x_long), length(controls_sc)) + rnorm(length(controls_sc), 0, 0.1), controls$Normalized, pch=19, col='grey40')
-  
+  # controls 
+  points(rep(min(x_long), length(controls_sc)) + rnorm(length(controls_sc), 0, 0.1), controls$Normalized, pch=8, col='grey40', cex=ptscex)
   
   # observations
-  points(x_long, y_sc * sd_global, pch=15, col="tomato", cex=1.5)
+  points(x_long, y_sc * sd_global, pch=19, col=point_cols[compound$rep_ind], cex=ptscex)
   
   # theta
-  abline(v=theta_mean, col="coral3", lty = 2, lwd=2) 
+  abline(v=theta_mean, col="coral3", lty = 2, lwd=2) # coral3
   theta_95 <- quantile(theta, probs = c(0.025, 0.25, 0.75, 0.975))
-  rect(theta_95[1], lims[3], theta_95[4], lims[4],  col=alpha("coral3", 0.3), border=FALSE)
-  text(theta_mean+0.5, lims[3]+5, expression('log'[10]*'(PoD)'), cex=1.0)
+  rect(theta_95[1], lims[3], theta_95[4], lims[4],  col=alpha("coral3", 0.2), border=FALSE)
+  text(theta_mean+0.5, lims[3]+5, expression('log'[10]*'(PoD)'), cex= 1.0)
   
-   # Dmax
+  
+  # Dmax
   rect(lims[1], Dmax[1], lims[2], Dmax[5],  col=alpha("goldenrod1", 0.4), border=FALSE)
-  abline(h=Dmax[3], col="goldenrod4", lty = 2, lwd=2)
-  text(lims[1]+0.3, Dmax[3]+5,  expression('D'["max"]), cex=1.0)
+  abline(h=Dmax[3], col="goldenrod4", lty = 2, lwd=2) # darkgreen
+  text(lims[1]+0.3, Dmax[3]+5,  expression('D'["max"]), cex= 1.0)
+  
   
   # DC50
-  rect(DC50[1], lims[3], DC50[5], lims[4],  col=alpha("steelblue", 0.3), border=FALSE)
+  rect(DC50[1], lims[3], DC50[5], lims[4],  col=alpha("steelblue", 0.2), border=FALSE)
   abline(v=DC50[3], col="steelblue", lty= 2, lwd=2)
-  text(DC50[3]+0.5, lims[3]+5, expression('log'[10]*'(DC'[50]*')'), cex=1.0)
+  text(DC50[3]+0.5, lims[3]+5, expression('log'[10]*'(DC'[50]*')'), cex= 1.0)
   
   polygon(c(gp.df$x,rev(gp.df$x)),c(gp.df$gp_975,rev(gp.df$gp_025)),
-          col=alpha(col3,0.3), border=NA)
-
+          col=alpha(col3,0.2), border=NA)
+  
   lines(gp.df$x, gp.df$gp, pch=19, col="darkslategray", lwd=2)
-
+  
   legend("topright", 
-          legend = c("observations", 
-                     "controls",
-                     "GP mean",
-                     "GP 95% BCI", 
-                     expression('log'[10]*'(PoD)'), 
-                     expression('log'[10]*'(PoD) 95% BCI'),
-                     expression('D'["max"]),
-                     expression('D'["max"]*' 95% BCI'),
-                     expression('log'[10]*'(DC'[50]*')'),
-                     expression('log'[10]*'(DC'[50]*')'*' 95% BCI')),
-          col = c("tomato",
-                  "grey40",
-                  "darkslategray", 
-                  alpha(col3,0.8), 
-                  "coral3", 
-                  "coral3", 
-                  "goldenrod1",
-                  "goldenrod1",
-                  "steelblue",
-                  alpha("steelblue", 0.6)),
-         pch = c(15,19, NA, 15, NA, 15, NA, 15, NA, 15), 
-         lty=c(NA,NA, 1,NA,2,NA, 2, NA, 2, NA),
-         lwd=c(NA,NA,3,NA,3,3,3, NA, 3, NA),
+         legend = c("observations-rep1", 
+                    "observations-rep2", 
+                    "controls",
+                    #"GP draws", 
+                    "GP mean",
+                    "GP 95% BCI", 
+                    expression('log'[10]*'(PoD)'), 
+                    expression('log'[10]*'(PoD) 95% BCI'),
+                    expression('D'["max"]),
+                    expression('D'["max"]*' 95% BCI'),
+                    expression('log'[10]*'(DC'[50]*')'),
+                    expression('log'[10]*'(DC'[50]*')'*' 95% BCI')),
+         col = c(point_cols[1],
+                 point_cols[2],
+                 "grey40",
+                 "darkslategray", 
+                 alpha(col3,0.8), 
+                 "coral3", 
+                 "coral3", 
+                 "goldenrod1",
+                 "goldenrod1",
+                 "steelblue",
+                 alpha("steelblue", 0.6)),
+         pch = c(19, 19, 8, NA, 15, NA, 15, NA, 15, NA, 15), 
+         lty=c(NA,NA, NA, 1,NA,2,NA, 2, NA, 2, NA),
+         lwd=c(NA,NA, NA,3,NA,3,3,3, NA, 3, NA),
          bty = "n", 
          pt.cex = 1, 
          cex = 1.0, 
@@ -298,7 +313,7 @@ The estimated curve and biologically relevant parameters can be displayed visual
          inset = c(0.05, 0.01))
 ```
 
-##   Print parameter estimates
+##   Print estimates of biologically meaningful parameters
 ```{r}
 
 out.df <- data.frame(Dmax = c(Dmax[1], Dmax[3], Dmax[5]),
