@@ -32,9 +32,9 @@ Data, the Stan model and a file with helper functions need to be added to Kaggle
 
 ### Add Stan code and helper functions:
 
-- make sure that the 'modelgp' folder, containing 'functions.R' and 'model_invlogit.stan', has been downloaded from GitHub
+- make sure that the 'modelgp' folder, containing 'functions.R' and 'model_invlogit_nu_g.stan', has been downloaded from GitHub
 
-- on Kaggle, click 'File' (top left corner) -> 'Add or upload data' -> 'Upload dataset' -> enter dataset title 'modelgp' -> browse your files and upload 'functions.R' and 'model_invlogit.stan' -> click 'Create'
+- on Kaggle, click 'File' (top left corner) -> 'Add or upload data' -> 'Upload dataset' -> enter dataset title 'modelgp' -> browse your files and upload 'functions.R' and 'model_invlogit_nu_g.stan' -> click 'Create'
 
 - it might take some time for Kaggle to upload the files
 
