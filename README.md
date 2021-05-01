@@ -2,8 +2,13 @@ Example data and code for the manuscript "Flexible fitting of PROTAC concentrati
 
 The kernel implemented in the Stan file, is a changepoint kernel with a steep transition function (see Supplement).
 
+# Ways to run this code:
 
-## Using Kaggle R kernel
+## 1. On a local machine
+
+File 'analysis.R' provides code using the 'rstan' library, file 'analysis_cmdstanr.R' provides code using the 'cmdstanr' library.
+
+## 2. Using Kaggle R kernel
 
 To avoid installing the "rstan" library, one can run the model in the cloud using Kaggle R kernel, following the pre-made notebook. 
 
